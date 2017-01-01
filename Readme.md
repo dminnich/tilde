@@ -24,15 +24,15 @@ This was written with security in mind.
 3. Point the @, A, www and any other DNS records you want at your VPSes IP. 
 4. Login to your VPS as root enable selinux and create an account for admin work giving it full sudo rights and upload your ssh key to it
     
-    >useradd sysop 
-    >visudo
-    >sysop ALL=(ALL) NOPASSWD: ALL
-    >vi /etc/sysconfig/selinux #set SELINUX=enforcing SELINUXTYPE=targeted and reboot if its not like that
-    >su - sysop
-    >mkdir ~/.ssh
-    >chmod 700 ~/.ssh
-    >vi ~/.ssh/authorized_keys
-    >chmod 600 ~/.ssh/authorized_keys
+	    useradd sysop 
+	    visudo
+	    sysop ALL=(ALL) NOPASSWD: ALL
+	    vi /etc/sysconfig/selinux #set SELINUX=enforcing SELINUXTYPE=targeted and reboot if its not like that
+	    su - sysop
+	    mkdir ~/.ssh
+	    chmod 700 ~/.ssh
+	    vi ~/.ssh/authorized_keys
+	    chmod 600 ~/.ssh/authorized_keys
 
 
 5. Populate users.csv with username,sshkey entries for your users. Do NOT include the admin user you manually created above, but feel free to create another normal user account for yourself here.  
@@ -74,44 +74,47 @@ Use scp, rsync, ssh + vim, Filezilla, etc to place your static content under you
 You can only email other folks on this server.  You can only receive email from other folks on this server.  You can only check and send email by being sshed into the server.  
 
 Basic alpine config and send/receive test
-> alpine
-> enter
-> S
-> C
-> Inbox Path
-> enter
-> Name of Inbox server: #leave blank
-> enter
-> Folder name to use for INBOX: Mailbox
-> enter
-> E
-> Y
-> C
-> To: $username@$domain
-> Subject: test
-> Message: test
-> ctrl - x
-> Y
-> L
-> INBOX 
-> enter
-> test 
-> enter
-> q
-> Y
+
+	alpine
+	enter
+	S
+	C
+	Inbox Path
+	enter
+	Name of Inbox server: #leave blank
+	enter
+	Folder name to use for INBOX: Mailbox
+	enter
+	E
+	Y
+	C
+	To: $username@$domain
+	Subject: test
+	Message: test
+	ctrl - x
+	Y
+	L
+	INBOX 
+	enter
+	test 
+	enter
+	q
+	Y
 
 #### IRC
 You can only chat with other people on this server.  You must be sshed in to connect to the IRC server. 
 
 Basic irssi usage
->irssi
->/connect $domain
->/list #find a channel
->/join #chat
->/n #see who is in the channel
-> type words to talk
-> switch windows with ctrl-n and ctrl-p. close windows with /window close
-> private message somebody with /q username
-> start a new channel with /join #newchannel
-> /quit to quit
+
+	irssi
+	/connect $domain
+	/list #find a channel
+	/join #chat
+	/n #see who is in the channel
+	type words to talk
+	switch windows with ctrl-n and ctrl-p. close windows with /window close
+	private message somebody with /q username
+	start a new channel with /join #newchannel
+	/quit to quit
+
 
