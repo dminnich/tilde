@@ -1,0 +1,4 @@
+#!/bin/bash
+echo "Top 10 disk conumers for $(date +"%F")"
+cd /home/
+du -hs * | sort -hr | head -10

@@ -1,0 +1,522 @@
+---
+#todo:
+#- switch to tags and tasks and proper file structure
+#- buy domain and get letsencrypt working
+#- figure out per user systemd cgroups for cpu, memory and io limits. and figure out way to kill bg jobs.  if people are real jerks. 
+- hosts: all
+  vars:
+    fqdn: tilde.win #setup dns records before running playbook
+    sysop: sysop  #create account with ssh key and full sudo rights before running playbook
+    ircoppass: changeme  #irc op password
+    letsencrypt: False  
+  tasks:
+
+#general
+  - name: install updates
+    yum: name=* state=latest
+  - name: install epel
+    package: name={{ item }} state=latest
+    with_items:
+     - epel-release
+  - name: install system apps
+    package: name={{ item }} state=latest
+    with_items:
+     - libselinux-python
+     - firewalld
+     - lsof
+     - bind-utils
+     - rsync
+     - policycoreutils-python
+     - net-tools
+     - bridge-utils
+     - nmap-ncat
+     - telnet
+     - audit
+     - cronie-anacron
+     - rsyslog
+     - aide
+     - logwatch
+     - yum-cron
+  - name: install user apps
+    package: name={{ item }} state=present
+    with_items:
+     - vim
+     - screen
+     - emacs
+     - nano
+     - python
+     - perl
+     - ruby
+     - lua
+     - nodejs
+     - tcsh
+     - zsh
+     - fish
+     - tmux
+     - irssi 
+     - mutt
+     - alpine
+     - curl
+     - wget
+     - git
+     - hg
+     - bzr
+     - svn
+     - cvs
+     - "@development"
+     - tree
+     - fortune-mod
+     - lynx
+     - htop
+     - cowsay
+     - jq
+     - mc
+     - elinks
+     - gnuplot
+     - ImageMagick
+     - rrdtool
+     - mg
+     - vile
+     - zile
+     - figlet
+     - weechat
+     - gcc
+     - readline
+     - tig
+     - sbcl
+     - tidy 
+     - bc 
+     - ncdu
+     - talk-server
+     - talk
+  - name: set hostname
+    hostname: name={{ fqdn }}
+  - name: set hostname /etc/hosts
+    lineinfile:
+      dest: /etc/hosts
+      regexp: '^127\.0\.0\.1'
+      line: 127.0.0.1 localhost {{ fqdn }}
+      owner: root
+      group: root
+      mode: 0644
+      backup: yes
+  - name: set hostname /etc/hosts
+    lineinfile:
+      dest: /etc/hosts
+      regexp: '^::1'
+      line: ::1 localhost {{ fqdn }}
+      owner: root
+      group: root
+      mode: 0644
+      backup: yes
+  - name: set sysop mail ailias 
+    lineinfile:
+      dest: /etc/aliases
+      regexp: '^root\:'
+      line: "root: {{ sysop }}"
+      owner: root
+      group: root
+      mode: 0644
+      backup: yes
+    notify:
+     - newaliases
+  - name: create tildeusers group
+    group:
+      name: tildeusers
+      state: present
+  - name: enable and start system apps
+    service:
+      name={{ item }} enabled=yes state=started
+    with_items:
+     - firewalld
+     - auditd
+     - crond
+     - rsyslog
+     - yum-cron
+  - name: login.defs default new account settings
+    template:
+      src: templates/general/login.defs.j2
+      dest: /etc/login.defs
+      owner: root
+      group: root
+      mode: '0644'
+      backup: yes
+      force: yes
+  - name: useradd default new account settings
+    template:
+      src: templates/general/useradd.j2
+      dest: /etc/default/useradd
+      owner: root
+      group: root
+      mode: '0644'
+      backup: yes
+      force: yes
+  - name: skel dir
+    copy:
+      src: files/general/skel/
+      dest: /etc/tskel
+      owner: root
+      group: root
+      mode: '0644'
+      backup: yes
+      force: yes
+  - name: limits.conf user quotas
+    template:
+      src: templates/general/limits.conf.j2
+      dest: /etc/security/limits.conf
+      owner: root
+      group: root
+      mode: '0644'
+      backup: yes
+      force: yes
+  - name: logwatch config
+    template:
+      src: templates/general/0logwatch.j2
+      dest: /etc/cron.daily/0logwatch
+      owner: root
+      group: root
+      mode: '0755'
+      force: yes
+  - name: audit config. log all commands ever
+    template:
+      src: templates/general/audit.rules.j2
+      dest: /etc/audit/rules.d/audit.rules
+      owner: root
+      group: root
+      mode: '0600'
+      force: yes
+    notify:
+     - restart auditd
+  - name: yum-cron config. do updates automatically
+    template:
+      src: templates/general/yum-cron.conf.j2
+      dest: /etc/yum/yum-cron.conf
+      owner: root
+      group: root
+      mode: '0644'
+      force: yes
+      backup: yes
+    notify:
+     - restart yum-cron
+  - name: disk usage report script
+    template:
+      src: templates/general/tdu.sh.j2
+      dest: /usr/local/bin/tdu.sh
+      owner: root
+      group: root
+      mode: '0755'
+      force: yes
+  - name: disk usage report script cron job
+    cron:
+      name: "du report"
+      day: "*"
+      hour: "14"
+      job: "/usr/local/bin/tdu.sh"
+      minute: "27"
+      month: "*"
+      state: present
+      user: root
+      weekday: "*"
+  - name: create ansible storage dir
+    file:
+      path: /root/ansible.locks
+      state: directory
+      mode: 0755
+  - name: allow outgoing established
+    shell: firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 0 -m state --state RELATED,ESTABLISHED -j ACCEPT && touch /root/ansible.locks/output0.lock
+    args:
+      creates: /root/ansible.locks/output0.lock
+    notify:
+     - restart firewalld
+     - restart fail2ban
+  - name: allow outgoing loopback
+    shell: firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 1 -o lo -j ACCEPT && touch /root/ansible.locks/output1.lock
+    args:
+      creates: /root/ansible.locks/output1.lock
+    notify:
+     - restart firewalld
+     - restart fail2ban
+  - name: allow outgoing port 80
+    shell: firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 2 -p tcp -m tcp --dport=80 -j ACCEPT && touch /root/ansible.locks/output2.lock
+    args:
+      creates: /root/ansible.locks/output2.lock
+    notify:
+     - restart firewalld
+     - restart fail2ban
+  - name: allow outgoing port 443
+    shell: firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 3 -p tcp -m tcp --dport=443 -j ACCEPT && touch /root/ansible.locks/output3.lock
+    args:
+      creates: /root/ansible.locks/output3.lock
+    notify:
+     - restart firewalld
+     - restart fail2ban
+  - name: allow outgoing port 53
+    shell: firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 4 -p udp --dport=53 -j ACCEPT && touch /root/ansible.locks/output4.lock
+    args:
+      creates: /root/ansible.locks/output4.lock
+    notify:
+     - restart firewalld
+     - restart fail2ban
+  - name: allow outgoing icmp
+    shell: firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 5 -p icmp -j ACCEPT && touch /root/ansible.locks/output5.lock
+    args:
+      creates: /root/ansible.locks/output5.lock
+    notify:
+     - restart firewalld
+     - restart fail2ban
+  - name: deny all other outgoing connectivity
+    shell: firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 6 -j DROP && touch /root/ansible.locks/output6.lock
+    args:
+      creates: /root/ansible.locks/output6.lock
+    notify:
+     - restart firewalld
+     - restart fail2ban
+
+#shell
+  - name: install ssh and friends
+    package: name={{ item }} state=latest
+    with_items:
+     - openssh-server
+     - fail2ban
+     - fail2ban-firewalld
+  - name: ssh config
+    template:
+      src: templates/ssh/sshd_config.j2
+      dest: /etc/ssh/sshd_config
+      owner: root
+      group: root
+      mode: '0600'
+      backup: yes
+      force: yes
+    notify:
+     - restart sshd
+  - name: ssh banner
+    template:
+      src: templates/ssh/issue
+      dest: /etc/issue
+      owner: root
+      group: root
+      mode: '0644'
+      backup: yes
+      force: yes
+  - name: motd
+    template:
+      src: templates/ssh/motd.j2
+      dest: /etc/motd
+      owner: root
+      group: root
+      mode: '0644'
+      backup: yes
+      force: yes
+  - name: fail2ban config
+    template:
+      src: templates/ssh/jail.local.j2
+      dest: /etc/fail2ban/jail.local
+      owner: root
+      group: root
+      mode: '0644'
+      backup: yes
+      force: yes
+    notify:
+     - restart firewalld
+     - restart fail2ban
+  - name: enable ssh and friends at boot
+    service:
+      name={{ item }} enabled=yes
+    with_items:
+     - sshd
+     - fail2ban
+  - name: open up ssh port
+    firewalld: permanent=true state=enabled service=ssh
+    notify:
+     - restart firewalld
+     - restart fail2ban
+
+
+#web
+  - name: install apache and friends
+    package: name={{ item }} state=latest
+    with_items:
+     - httpd
+     - mod_ssl
+     - certbot
+  - name: selinux userdir exception
+    seboolean:
+      name: httpd_enable_homedirs
+      state: yes
+      persistent: yes
+  - name: apache config
+    copy:
+      src: files/httpd/httpd.conf
+      dest: /etc/httpd/conf/httpd.conf
+      owner: root
+      group: root
+      mode: '0644'
+      backup: yes
+      force: yes
+    notify:
+     - restart apache
+  - name: apache conf.d
+    copy:
+      src: files/httpd/conf.d/
+      dest: /etc/httpd/tconf.d
+      owner: root
+      group: root
+      mode: '0644'
+      backup: yes
+      force: yes
+    notify:
+     - restart apache
+  - name: apache conf.modules.d
+    copy:
+      src: files/httpd/conf.modules.d/
+      dest: /etc/httpd/tconf.modules.d
+      owner: root
+      group: root
+      mode: '0644'
+      backup: yes
+      force: yes
+    notify:
+     - restart apache
+  - name: apache site config
+    template:
+      src: templates/httpd/tilde.conf.j2
+      dest: /etc/httpd/tconf.d/tilde.conf
+      owner: root
+      group: root
+      mode: '0644'
+      backup: yes
+      force: yes
+    notify:
+     - restart apache
+  - name: default webpage
+    template:
+      src: templates/httpd/index.html.j2
+      dest: /var/www/html/index.html
+      owner: root
+      group: root
+      mode: '0644'
+      backup: yes
+      force: yes
+  - name: create self-signed cert
+    shell: openssl req -subj "/CN={{ fqdn }}/O={{ fqdn }}/C=US" -new -newkey rsa:2048 -sha256 -days 3650 -nodes -x509 -keyout /etc/httpd/conf/server.key -out /etc/httpd/conf/server.crt && chmod 600 /etc/httpd/conf/server.key
+    args:
+      creates: /etc/httpd/conf/server.crt
+    when: not letsencrypt
+  - name: enable apache at boot
+    service:
+      name={{ item }} enabled=yes 
+    with_items:
+     - httpd
+  - name: open up web ports
+    firewalld: permanent=true state=enabled service={{ item }}
+    with_items:
+     - http
+     - https
+    notify:
+     - restart firewalld
+     - restart fail2ban
+
+
+#mail
+  - name: install postfix
+    package: name={{ item }} state=latest
+    with_items:
+     - postfix
+  - name: configure postfix
+    template:
+      src: templates/mail/main.cf.j2
+      dest: /etc/postfix/main.cf
+      owner: root
+      group: root
+      mode: '0644'
+      backup: yes
+      force: yes
+    notify:
+     - restart postfix
+  - name: enable postfix at boot
+    service:
+      name={{ item }} enabled=yes 
+    with_items:
+     - postfix
+  - name: block mail port
+    shell: firewall-cmd --permanent --direct --add-rule ipv4 filter INPUT 0 -p tcp --destination-port 25 -j DROP && touch /root/ansible.locks/input0.lock
+    args:
+      creates: /root/ansible.locks/input0.lock
+    notify:
+     - restart firewalld
+     - restart fail2ban
+
+#irc
+  - name: install irc
+    package: name={{ item }} state=latest
+    with_items:
+     - ngircd
+  - name: configure ngircd
+    template:
+      src: templates/irc/ngircd.conf.j2
+      dest: /etc/ngircd.conf
+      owner: root
+      group: ngircd
+      mode: '0660'
+      backup: yes
+      force: yes
+    notify:
+     - restart ngircd
+  - name: enable ngircd at boot
+    service:
+      name={{ item }} enabled=yes state=started
+    with_items:
+     - ngircd
+  - name: block irc port
+    shell: firewall-cmd --permanent --direct --add-rule ipv4 filter INPUT 1 -p tcp --destination-port 6667 -j DROP && touch /root/ansible.locks/input1.lock
+    args:
+      creates: /root/ansible.locks/input1.lock
+    notify:
+     - restart firewalld
+     - restart fail2ban
+
+
+#users
+  - name: install updates
+    yum: name=* state=latest
+  - name: create accounts
+    user:
+      name: "{{ item.split(',')[0] }}"
+      shell: /bin/bash
+      groups: tildeusers
+      createhome: yes
+      state: present
+      append: yes
+    with_lines: 
+      cat "users.csv"
+  - name: upload the ssh key
+    authorized_key:
+      user: "{{ item.split(',')[0] }}"
+      key: "{{ item.split(',')[1] }}"
+      exclusive: no
+      manage_dir: yes
+    with_lines: 
+      cat "users.csv"
+
+
+
+  handlers:
+  - name: restart sshd
+    service: name=sshd state=restarted 
+  - name: restart firewalld
+    service: name=firewalld state=restarted 
+  - name: restart fail2ban
+    service: name=fail2ban state=restarted 
+  - name: restart apache
+    service: name=httpd state=restarted 
+  - name: restart postfix
+    service: name=postfix state=restarted 
+  - name: restart ngircd
+    service: name=ngircd state=restarted 
+  - name: restart auditd
+    shell: service auditd restart 
+  - name: restart yum-cron
+    service: name=yum-cron state=restarted 
+  - name: newaliases
+    shell: newaliases
