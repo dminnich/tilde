@@ -19,7 +19,9 @@ SSLCryptoDevice builtin
   SSLCipherSuite EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:AES256+EDH
   SSLProtocol All -SSLv2 -SSLv3
   {% if letsencrypt %}
-  #todo
+  SSLCertificateFile /etc/letsencrypt/live/{{ fqdn }}/cert.pem
+  SSLCertificateKeyFile /etc/letsencrypt/live/{{ fqdn }}/privkey.pem
+  SSLCertificateChainFile /etc/letsencrypt/live/{{ fqdn }}/chain.pem
   {% else %}
   SSLCertificateFile /etc/httpd/conf/server.crt
   SSLCertificateKeyFile /etc/httpd/conf/server.key

@@ -1,19 +1,18 @@
 ---
 #todo:
 #- switch to tags and tasks and proper file structure
-#- buy domain and get letsencrypt working
-#- figure out per user systemd cgroups for cpu, memory and io limits. and figure out way to kill bg jobs.  if people are real jerks. 
+#- if people are real jerks: figure out per user systemd cgroups for cpu, memory and io limits. and figure out way to kill bg jobs.  
 - hosts: all
   vars:
-    fqdn: tilde.win #setup dns records before running playbook
+    fqdn: atilde.party #setup dns records before running playbook
     sysop: sysop  #create account with ssh key and full sudo rights before running playbook
     ircoppass: changeme  #irc op password
-    letsencrypt: False  
+    letsencrypt: True
+    letsencrypt_email: nobody@example.com
+    letsencrypt_domains: atilde.party,www.atilde.party
   tasks:
 
 #general
-  - name: install updates
-    yum: name=* state=latest
   - name: install epel
     package: name={{ item }} state=latest
     with_items:
@@ -345,6 +344,14 @@
       name: httpd_enable_homedirs
       state: yes
       persistent: yes
+  - name: open up web ports
+    firewalld: permanent=true state=enabled service={{ item }}
+    with_items:
+     - http
+     - https
+    notify:
+     - restart firewalld
+     - restart fail2ban
   - name: apache config
     copy:
       src: files/httpd/httpd.conf
@@ -403,19 +410,44 @@
     args:
       creates: /etc/httpd/conf/server.crt
     when: not letsencrypt
+  - name: check for letsencrypt cert
+    stat: path=/etc/letsencrypt/live/{{ fqdn }}/cert.pem
+    ignore_errors: yes
+    register: letsencrypt_cert
+    when: letsencrypt
+  - name: stop apache to generate letsencrypt cert
+    service: name=httpd state=stopped
+    ignore_errors: yes
+    when: letsencrypt and letsencrypt_cert.stat.exists == False
+    notify:
+     - restart apache
+  - name: restart firewalld
+    service: name=firewalld state=restarted 
+    when: letsencrypt and letsencrypt_cert.stat.exists == False
+    notify:
+     - restart firewalld
+  - name: generate letsencrypt cert
+    shell: certbot -n -m {{ letsencrypt_email }} --agree-tos --expand --allow-subset-of-names certonly --standalone -d {{ letsencrypt_domains }}
+    when: letsencrypt and letsencrypt_cert.stat.exists == False
+    notify:
+     - restart apache
+  - name: letsencrypt renewal cron job
+    cron:
+      name: "letsencrypt renewal"
+      day: "*"
+      hour: "14"
+      job: '/usr/bin/certbot renew --pre-hook "/usr/bin/systemctl stop httpd" --post-hook "/usr/bin/systemctl start httpd" --disable-hook-validation'
+      minute: "47"
+      month: "*"
+      state: present
+      user: root
+      weekday: "*"
+    when: letsencrypt
   - name: enable apache at boot
     service:
       name={{ item }} enabled=yes 
     with_items:
      - httpd
-  - name: open up web ports
-    firewalld: permanent=true state=enabled service={{ item }}
-    with_items:
-     - http
-     - https
-    notify:
-     - restart firewalld
-     - restart fail2ban
 
 
 #mail

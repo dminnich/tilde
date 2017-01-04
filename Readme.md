@@ -22,12 +22,16 @@ This was written with security in mind.
 1. Clone this repo and install ansible on your machine
 2. Stand up a standard CentOS 7 VPS.  Amazon linux not tested.  OpenVZ containers not tested.  I tested against an hourly instance from ArubaCloud.
 3. Point the @, A, www and any other DNS records you want at your VPSes IP. 
-4. Login to your VPS as root enable selinux and create an account for admin work giving it full sudo rights and upload your ssh key to it
+4. Login to your VPS as root enable selinux and create an account for admin work giving it full sudo rights and upload your ssh key to it. Also do updates.
     
+        #managing reboots and ssh daemon restarts is mildly challenging with ansible so do that work manually
+	    vi /etc/sysconfig/selinux #set SELINUX=enforcing SELINUXTYPE=targeted and reboot if its not like that
+        yum clean all
+        yum update 
+        #create a user for ansible to use going forward. 
 	    useradd sysop 
 	    visudo
 	    sysop ALL=(ALL) NOPASSWD: ALL
-	    vi /etc/sysconfig/selinux #set SELINUX=enforcing SELINUXTYPE=targeted and reboot if its not like that
 	    su - sysop
 	    mkdir ~/.ssh
 	    chmod 700 ~/.ssh
@@ -43,7 +47,9 @@ This was written with security in mind.
     - fqdn #must equal the top level DNS name for your site.  IE: tilde.club
     - sysop #uid of the admin user you created above. will be IRC OP and will receive cron emails
     - ircoppass #IRC OP password
-    - letsencrypt #keep false until I implement it
+    - letsencrypt #True if you want free letsencrypt cert to be generated for you otherwise you'll get a self-signed one
+    - letsencrypt_email #email address to register with letsencrypt for expiration and other emails
+    - letsencrypt_domains #comma seperated FQDNs that point at this server that you want in the SAN section of the cert
 
 - replace 127.0.0.1 in inventory with the IP of your VPS
 - templates/general/limits.conf.j2  #resource limits for accounts
@@ -55,14 +61,13 @@ This was written with security in mind.
 
     >ansible-playbook -i inventory -u sysop -b playbook.yml
 
-8. Get proper HTTPS certs from [LetsEncrypt](https://certbot.eff.org/#centosrhel7-other) and update templates/httpd/tilde.conf.j2 to point to them.
 
 
 ## Adding more users
 Add their info to users.csv and re-run the playbook.  
 
 ## Removing users
-Remove their info from users.csv and do a `userdel -r $username` as root.
+Remove their info from users.csv and do a `userdel -r $username` as root on the server.
 
 
 ## End User Usage
